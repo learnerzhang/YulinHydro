@@ -1,5 +1,6 @@
 # 启动方式
-# uvicorn main:app --reload --port 5000 --host 0.0.0.0
+### python main.py
+### uvicorn main:app --reload --port 5000 --host 0.0.0.0
 
 
 # 重建表, 删除表，启动服务
