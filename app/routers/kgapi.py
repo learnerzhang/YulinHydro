@@ -43,6 +43,17 @@ async def download_file(filename: str):
         raise HTTPException(status_code=404, detail="文件不存在")
     return FileResponse(file_path, filename=filename)
 
+def format_chinese_date(date_str: str) -> str:
+    """将 'YYYYMMDD' 格式的日期转换为 'YYYY年MM月DD日' 格式"""
+    # 确保日期字符串是8位数字
+    if len(date_str) != 8 or not date_str.isdigit():
+        return "日期格式错误"
+
+    year = date_str[:4]
+    month = date_str[4:6].lstrip('0') or '0'  # 移除前导零，但确保不为空
+    day = date_str[6:8].lstrip('0') or '0'  # 移除前导零，但确保不为空
+
+    return f"{year}年{month}月{day}日"
 
 @router.post("/makeword")
 async def makezqpgword(pinggu: PingGuBase):
@@ -61,9 +72,19 @@ async def makezqpgword(pinggu: PingGuBase):
             from app import kg_flood
             template_path = "static/FLOOD_TEMPLETE.docx"
             doc = DocxTemplate(template_path)
-            params['startdate'] = params['startDate']
-            params['enddate'] = params['endDate']
-            params['publicdate'] = datetime.now().strftime('%Y年%m月%d日')
+            params['startdate'] = format_chinese_date(pinggu.startdate)  # params['startDate']
+            params['enddate'] = format_chinese_date(pinggu.enddate)  # params['endDate']
+            now = datetime.now()
+            year = now.strftime('%Y年')  # 例如：2025年
+            month = now.strftime('%m月')[1:] if now.strftime('%m').startswith('0') else now.strftime('%m月')
+            day = now.strftime('%d日')[1:] if now.strftime('%d').startswith('0') else now.strftime('%d日')
+            # 拼接结果
+            params['publicdate'] = f"{year}{month}{day}"
+            # params['publicdate'] = datetime.now().strftime('%Y年%m月%d日')
+
+            params[
+                'zqcy'] = kg_flood.get_zqcy()  # f"{params['startdate']}-{params['enddate']}, 0-10mm降水量的水文站98个，10-50mm降雨量的水文站0个，50-100mm降雨量的水文站0个，100-200mm降雨量的水文站0个，200mm以上降雨量的水文站0个，最大降雨量发生在定边县纪畔镇张畔村（累计0.5mm）。"  #kg_flood.get_zqcy()
+            # print("kg_flood.get_zqcy():",kg_flood.get_zqcy())
             params['zqzs'] = kg_flood.get_zhgk(params)
             params['slgcssssqk'] = kg_flood.get_slgcssssqk(params)
             params['zdslgcsgqk'] = kg_flood.get_zdslgcsgqk(params)
@@ -72,13 +93,21 @@ async def makezqpgword(pinggu: PingGuBase):
             params['shzhfyqk'] = kg_flood.get_shzhfyqk(params)
             params['zdszdqfx'] = kg_flood.get_zdszdqfx(params)
         elif pinggu.disasterType == "DROUGHT":
-            from app import kg_drought
+            from app import kg_drought, kg_flood
             # 灾情类型，枚举值：FLOOD（洪涝灾害）、DROUGHT（干旱灾害）
             template_path = "static/DROUGHT_TEMPLETE.docx"
             doc = DocxTemplate(template_path)
-            params['startdate'] = params['startDate']
-            params['enddate'] = params['endDate']
-            params['publicdate'] = datetime.now().strftime('%Y年%m月%d日')
+            params['startdate'] = format_chinese_date(pinggu.startdate)  # params['startDate']
+            params['enddate'] = format_chinese_date(pinggu.enddate)  # params['endDate']
+            now = datetime.now()
+            year = now.strftime('%Y年')  # 例如：2025年
+            month = now.strftime('%m月')[1:] if now.strftime('%m').startswith('0') else now.strftime('%m月')
+            day = now.strftime('%d日')[1:] if now.strftime('%d').startswith('0') else now.strftime('%d日')
+            # 拼接结果
+            params['publicdate'] = f"{year}{month}{day}"
+            # params['publicdate'] = datetime.now().strftime('%Y年%m月%d日')
+            params[
+                'zqcy'] = kg_flood.get_zqcy()  # f"{params['startdate']}-{params['enddate']}, 0-10mm降水量的水文站98个，10-50mm降雨量的水文站0个，50-100mm降雨量的水文站0个，100-200mm降雨量的水文站0个，200mm以上降雨量的水文站0个，最大降雨量发生在定边县纪畔镇张畔村（累计0.5mm）。"#
             params['zqzs'] = kg_drought.get_zqzs(params)
             params['dqnyhqzk'] = kg_drought.get_dqnyhqzk(params)
             params['slgcxssyzk'] = kg_drought.get_slgcxssyzk(params)
@@ -92,14 +121,16 @@ async def makezqpgword(pinggu: PingGuBase):
         output_dir = Path(output_dirpath)
         output_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        filename = f"灾情评估报告_{params['startdate']}_{params['enddate']}.docx"
+        filename = f"灾情评估报告_{pinggu.startdate}_{pinggu.enddate}.docx"
         file_path = output_dir / filename
-        
+
         # 保存新文件
         doc.save(str(file_path))
+        # 添加页码
+        # add_custom_page_numbers(str(file_path))
         download_url = f"{output_dirpath}/{filename}"
         return {"message": "文件生成成功", "download_url": download_url}
-    
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
