@@ -4,4 +4,4 @@
 
 
 # 重建表, 删除表，启动服务
-# 启动应用后，访问 http://localhost:8000/docs
+# 启动应用后，访问 http://localhost:5000/docs
