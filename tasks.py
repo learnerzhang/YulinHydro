@@ -19,13 +19,16 @@ celery = Celery('tasks', broker=f'redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_
 celery.conf.beat_schedule = {
     'parse-documents-every-10-minutes': {
         'task': 'tasks.parse_documents',
-        'schedule': 60,  # 每X分钟
+        'schedule': 60*10,  # 每X分钟
     },
 }
 
-def run_magic_pdf(pdf_path, output_dir, mode="auto"):
+# 创建全局异步锁
+pdf_processing_lock = asyncio.Lock()
+
+async def run_magic_pdf(pdf_path, output_dir, mode="auto"):
     """
-    执行 magic-pdf 命令处理 PDF 文件
+    执行 magic-pdf 命令处理 PDF 文件，使用异步锁确保串行执行
 
     参数:
         pdf_path (str): 输入 PDF 文件的路径
@@ -46,26 +49,31 @@ def run_magic_pdf(pdf_path, output_dir, mode="auto"):
             os.makedirs(output_dir)
         except OSError as e:
             return False, f"错误: 无法创建输出目录: {output_dir}，错误: {e}"
+    
+    # 使用异步锁确保同一时间只有一个协程可以执行magic-pdf命令
+    async with pdf_processing_lock:
+        logger.info(f"获取到锁，开始处理文件: {pdf_path}")
+        # 构建命令
+        cmd = ["mineru", "-p", pdf_path, "-o", output_dir, "-m", mode]
 
-    # 构建命令
-    cmd = ["magic-pdf", "-p", pdf_path, "-o", output_dir, "-m", mode]
+        try:
+            # 执行命令
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0:
+                return False, f"命令执行失败，返回代码: {process.returncode}\n错误信息:\n{stderr.decode('utf-8')}"
+                
+            return True, f"命令成功执行。\n标准输出:\n{stdout.decode('utf-8')}"
 
-    try:
-        # 执行命令
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return True, f"命令成功执行。\n标准输出:\n{result.stdout}"
-
-    except subprocess.CalledProcessError as e:
-        return False, f"命令执行失败，返回代码: {e.returncode}\n错误信息:\n{e.stderr}"
-
-    except Exception as e:
-        return False, f"执行命令时发生未知错误: {e}"
-
+        except Exception as e:
+            return False, f"执行命令时发生未知错误: {e}"
+        finally:
+            logger.info(f"释放锁，文件处理完成: {pdf_path}")
  
 
 # 新增异步处理函数
@@ -90,7 +98,8 @@ async def async_parse_documents():
             # magic-pdf -p {some_pdf} -o {some_output_dir} -m auto
             pdf_path = doc.file_path
             output_dir = f"static/output/magic_pdf/{doc.id}"
-            success, message = run_magic_pdf(pdf_path, output_dir, mode="auto")
+            # 使用异步方式调用run_magic_pdf
+            success, message = await run_magic_pdf(pdf_path, output_dir, mode="auto")
             if success:
                 logger.info(f"Successfully processed document: {doc.id}")
             else:
