@@ -1,9 +1,10 @@
+from app.utils import utils
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timedelta
-from app import base_crud, dbmodels, schemas, utils
+from app import base_crud, dbmodels, schemas
 from app.database import get_db
 from app.routers.auth import get_current_active_user
 from sqlalchemy.ext.asyncio import AsyncSession

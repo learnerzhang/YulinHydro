@@ -2,6 +2,8 @@ from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, L
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
+from sqlalchemy.orm import declarative_base
+from sqlalchemy.ext.asyncio import AsyncAttrs
 
 class User(Base):
     __tablename__ = "users"
@@ -50,18 +52,35 @@ class AttendanceRecord(Base):
     user = relationship("User", back_populates="attendance_records")    
 
 
-# dbmodels.py
-class Document(Base):
+class Tag(Base):
+    __tablename__ = "tags"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    documents = relationship("Document", secondary="document_tags", back_populates="tags")
+
+
+class DocumentTag(Base):
+    __tablename__ = "document_tags"
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id"))
+    tag_id = Column(Integer, ForeignKey("tags.id"))
+
+
+class Document(AsyncAttrs, Base):
     __tablename__ = "documents"
 
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, index=True)          # 文档名称
-    description = Column(String)                # 文档描述
-    content = Column(Text)                      # 文档内容
-    tags = Column(String)                       # 文档标签（逗号分隔）
-
-    file_path = Column(String)                  # 文档存储路径
-    file_type = Column(String)                  # 文件类型（pdf/docx等）
-
+    title = Column(String, index=True)
+    description = Column(String)
+    content = Column(Text)
+    # 修改字段名避免冲突
+    tag_string = Column(String, nullable=True)  # 存储字符串形式的标签
+    parsed = Column(Boolean, default=False)
+    file_path = Column(String)
+    file_type = Column(String)
+    
+    # 保留关系但重命名
+    tags = relationship("Tag", secondary="document_tags", back_populates="documents")
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

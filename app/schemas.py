@@ -74,13 +74,28 @@ class PagedResponse(BaseModel, Generic[T]):
     class Config:
         from_attributes = True  # 更新为 Pydantic V2 的配置
 
+
+class TagBase(BaseModel):
+    name: str
+
+class TagCreate(TagBase):
+    pass
+
+class Tag(TagBase):
+    id: int
+    documents: List["Document"] = []
+
+    class Config:
+        from_attributes = True
+
+
 # 文档
 class Document(BaseModel):
     id: Optional[int] = None
     title: str
     description: str
     content: str
-    tags: str
+    tag_string: str  # 字符串形式的标签
     file_path: str
     file_type: str
     created_at: Optional[datetime] = None
@@ -88,3 +103,7 @@ class Document(BaseModel):
 
     class Config:
         from_attributes = True
+
+# 循环引用处理
+Tag.update_forward_refs()
+Document.update_forward_refs()  

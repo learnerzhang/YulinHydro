@@ -18,9 +18,10 @@ tmp/
 
 # 忽略所有以 # 开头的临时文件
 #*.swp
-
+data/
 # 忽略所有 build 目录
 build/
+static/
 myenv/
 my-ui/
 

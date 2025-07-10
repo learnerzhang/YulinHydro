@@ -1,5 +1,4 @@
 import os
-from app.es_utils import index_document
 from sqlalchemy.orm import Session
 from app import dbmodels, schemas
 from typing import List, Optional

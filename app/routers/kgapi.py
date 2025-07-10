@@ -1,7 +1,8 @@
 import logging
+from app.utils import utils
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status, Cookie, Response
 from sqlalchemy import func, select
-from app import base_crud, dbmodels, schemas, utils
+from app import base_crud, dbmodels, schemas
 from app.dbmodels import User
 from pydantic import BaseModel
 from datetime import datetime, timedelta
@@ -58,7 +59,7 @@ async def makezqpgword(pinggu: PingGuBase):
         with open(json_path, 'r', encoding='utf-8') as f:
             params = json.load(f)['data']
         if pinggu.disasterType == "FLOOD":
-            from app import kg_flood
+            from app.utils import kg_flood
             template_path = "static/FLOOD_TEMPLETE.docx"
             doc = DocxTemplate(template_path)
             params['startdate'] = params['startDate']
@@ -72,7 +73,7 @@ async def makezqpgword(pinggu: PingGuBase):
             params['shzhfyqk'] = kg_flood.get_shzhfyqk(params)
             params['zdszdqfx'] = kg_flood.get_zdszdqfx(params)
         elif pinggu.disasterType == "DROUGHT":
-            from app import kg_drought
+            from app.utils import kg_drought
             # 灾情类型，枚举值：FLOOD（洪涝灾害）、DROUGHT（干旱灾害）
             template_path = "static/DROUGHT_TEMPLETE.docx"
             doc = DocxTemplate(template_path)
