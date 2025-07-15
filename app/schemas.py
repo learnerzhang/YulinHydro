@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import Optional, List, Generic, TypeVar
-from pydantic import BaseModel, EmailStr
-
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 class HomepageData(BaseModel):
     total_users: int
@@ -25,8 +24,7 @@ class User(UserBase):
     is_admin: bool
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class UserInDB(User):
     hashed_password: str
@@ -35,8 +33,7 @@ class UserPagination(BaseModel):
     users: List[User]  # 假设User模型已经定义
     total: int
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # 认证相关模型
 class Token(BaseModel):
@@ -60,8 +57,8 @@ class AttendanceRecord(AttendanceRecordBase):
     timestamp: datetime
     user: User  # 添加用户信息
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 
 T = TypeVar('T')
@@ -71,8 +68,7 @@ class PagedResponse(BaseModel, Generic[T]):
     page_size: int
     items: List[T]  # 使用泛型类型
     
-    class Config:
-        from_attributes = True  # 更新为 Pydantic V2 的配置
+    model_config = ConfigDict(from_attributes=True, arbitrary_types_allowed=True)
 
 
 class TagBase(BaseModel):
@@ -85,8 +81,7 @@ class Tag(TagBase):
     id: int
     documents: List["Document"] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True, arbitrary_types_allowed=True)
 
 
 # 文档
@@ -101,9 +96,14 @@ class Document(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True, arbitrary_types_allowed=True)
+
+class PaginationResult(BaseModel):
+    total: int
+    items: List[Document]
+    model_config = ConfigDict(from_attributes=True, arbitrary_types_allowed=True)
 
 # 循环引用处理
 Tag.update_forward_refs()
-Document.update_forward_refs()  
+Document.update_forward_refs()
+PaginationResult.update_forward_refs()  # 新增这一行

@@ -4,9 +4,10 @@ from app.utils.es_utils import delete_document_from_es, index_document_with_frag
 from app.dbmodels import Document, Tag
 from typing import List, Optional
 from datetime import datetime, timedelta
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import func, select
+from sqlalchemy import select, func, or_
 import logging
 logger = logging.getLogger(__name__)
 
@@ -66,10 +67,33 @@ async def create_document(
     return db_document
 
 async def search_documents(db: AsyncSession, query: str, skip: int = 0, limit: int = 10):
-    # 使用 select 语句替换 query 方法
-    stmt = select(Document).offset(skip).limit(limit)
+    # 构建搜索条件，在三个字段中进行模糊搜索
+    search_conditions = []
+    if query:
+        search_term = f"%{query}%"
+        search_conditions = [
+            Document.title.ilike(search_term),
+            Document.description.ilike(search_term),
+            Document.content.ilike(search_term)
+        ]
+    
+    # 构建查询语句
+    stmt = select(Document)
+    if search_conditions:
+        stmt = stmt.where(or_(*search_conditions))
+    
+    # 添加分页
+    stmt = stmt.offset(skip).limit(limit)
+    
+    # 执行查询
     result = await db.execute(stmt)
     return result.scalars().all()
+
+async def get_document_by_id(db: AsyncSession, document_id: int):
+    result = await db.execute(
+        select(Document).filter(Document.id == document_id)
+    )
+    return result.scalars().first()
 
 async def get_document_by_file_path(db: AsyncSession, file_path: str):
     """通过文件路径查询文档"""
@@ -175,3 +199,38 @@ async def mark_document_parsed(db: AsyncSession, doc_id: int):
         await db.commit()
         await db.refresh(document)
     return document
+
+
+
+
+async def search_documents_with_pagination(
+    db: AsyncSession, 
+    query: str, 
+    offset: int, 
+    limit: int
+) -> schemas.PaginationResult:
+    # 构建搜索条件
+    search_conditions = []
+    if query:
+        search_term = f"%{query}%"
+        search_conditions = [
+            Document.title.ilike(search_term),
+            Document.description.ilike(search_term),
+            Document.content.ilike(search_term)
+        ]
+    
+    # 统计总记录数
+    count_stmt = select(func.count()).select_from(Document)
+    if search_conditions:
+        count_stmt = count_stmt.where(or_(*search_conditions))
+    result = await db.execute(count_stmt)
+    total = result.scalar()
+    
+    # 查询分页数据
+    select_stmt = select(Document).offset(offset).limit(limit)
+    if search_conditions:
+        select_stmt = select_stmt.where(or_(*search_conditions))
+    result = await db.execute(select_stmt)
+    items = result.scalars().all()
+    
+    return schemas.PaginationResult(total=total, items=items)

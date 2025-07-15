@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+import os
 from app.utils.es_utils import create_index
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,10 +14,8 @@ app = FastAPI(title="榆林知识服务系统", description="基于FastAPI的榆
 
 # 跨域设置
 origins = [
-    "http://localhost",
-    "http://localhost:3000",
-    "http://localhost:8888",
-    # 添加你的前端域名
+    "http://127.0.0.1:8081",
+    "http://localhost:8081",
 ]
 
 @asynccontextmanager
@@ -26,14 +25,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)  # 将lifespan函数传递给FastAPI实例
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
+# 配置静态文件目录（确保路径正确）
+documents_dir = os.path.join(os.path.dirname(__file__), "static", "documents")
+app.mount("/static/documents", StaticFiles(directory=documents_dir), name="documents")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["http://127.0.0.1:8081", "http://localhost:8081"],  # 明确指定允许的源
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # 允许所有HTTP方法
+    allow_headers=["*"],  # 允许所有请求头
+    expose_headers=["*"]  # 新增：允许暴露所有响应头
 )
 
 # 路由设置

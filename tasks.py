@@ -36,26 +36,23 @@ celery.conf.beat_schedule = {
 file_locks: Dict[str, asyncio.Lock] = {}
 logger = logging.getLogger(__name__)
 
-async def run_magic_pdf(pdf_path: str, output_dir: str, mode: str = "auto") -> Tuple[bool, str, Optional[str]]:
+async def run_magic_pdf(pdf_path: str, unique_output_dir: str, mode: str = "auto") -> Tuple[bool, str, Optional[str]]:
     """
     执行 magic-pdf 命令处理 PDF 文件，使用基于文件路径的锁确保同文件串行执行
     
     参数:
         pdf_path: 输入 PDF 文件的路径
-        output_dir: 输出目录的路径
+        unique_output_dir: 输出目录的路径
         mode: 处理模式，默认为 "auto"
     
     返回:
         success: 命令是否成功执行
         message: 命令执行结果信息
-        unique_output_dir: 生成的唯一输出目录
     """
     # 检查输入文件是否存在
     if not os.path.exists(pdf_path):
         return False, f"错误: 输入文件不存在: {pdf_path}", None
 
-    # 为每个文件创建唯一的输出子目录
-    unique_output_dir = os.path.join(output_dir, str(uuid.uuid4()))
     os.makedirs(unique_output_dir, exist_ok=True)
     
     # 获取或创建基于文件路径的锁
@@ -99,13 +96,13 @@ async def run_magic_pdf(pdf_path: str, output_dir: str, mode: str = "auto") -> T
 
             if process.returncode != 0:
                 error_msg = f"命令执行失败，返回代码: {process.returncode}\n错误信息:\n{''.join(output_lines)}"
-                return False, error_msg, unique_output_dir
+                return False, error_msg
             
             success_msg = f"命令成功执行。\n标准输出:\n{''.join(output_lines)}"
-            return True, success_msg, unique_output_dir
+            return True, success_msg
             
         except Exception as e:
-            return False, f"执行命令时发生未知错误: {e}", unique_output_dir
+            return False, f"执行命令时发生未知错误: {e}"
         finally:
             logger.info(f"释放 {pdf_path} 的文件锁，处理完成")
 
@@ -121,22 +118,21 @@ async def cleanup_output(output_dir: Optional[str]):
 async def process_single_document(db: AsyncSession, doc: Document):
     """处理单个文档的协程函数"""
     pdf_path = doc.file_path
-    unique_output_dir = None
-    
+    # 使用标准路径处理方式
+    unique_output_dir = os.path.join(OUTPUT_BASE_DIR, f"{str(doc.id)}")
+    base_name = os.path.basename(pdf_path)
+    tmpname = os.path.splitext(base_name)[0]
+    tmppath = os.path.join(OUTPUT_BASE_DIR, f"{str(doc.id)}/{tmpname}/auto/{tmpname}_middle.json")
     try:
-        # 使用异步方式调用run_magic_pdf
-        success, message, unique_output_dir = await run_magic_pdf(
-            pdf_path, OUTPUT_BASE_DIR, mode="auto"
-        )
-        
-        if not success:
-            logger.error(f"处理文档 {doc.id} 失败: {message}")
-            return
-        
-        # 使用标准路径处理方式
-        base_name = os.path.basename(pdf_path)
-        tmpname = os.path.splitext(base_name)[0]
-        tmppath = os.path.join(unique_output_dir, f"{tmpname}/auto/{tmpname}_middle.json")
+        if not os.path.exists(tmppath):
+            # 使用异步方式调用run_magic_pdf
+            success, message = await run_magic_pdf(
+                pdf_path, unique_output_dir, mode="auto"
+            )
+            
+            if not success:
+                logger.error(f"处理文档 {doc.id} 失败: {message}")
+                return
         
         # 检查中间文件是否存在
         if not os.path.exists(tmppath):
@@ -205,8 +201,6 @@ async def process_single_document(db: AsyncSession, doc: Document):
         }
         
         # 修复点1: 检查index_document_with_fragments是否异步
-        # 如果是同步函数，直接调用而不加await
-        # 如果是异步函数，使用await
         # 这里我们根据错误日志假设它是同步函数
         index_document_with_fragments(
             document_id=f"doc_{doc.id}",
@@ -254,7 +248,6 @@ async def async_parse_documents():
                 try:
                     logger.info(f"处理文档 ID: {doc.id}, 标题: {doc.title}")
                     
-                    # 修复点4: 为每个文档创建新的会话
                     # 避免会话状态污染
                     async with AsyncSessionLocal() as doc_db:
                         # 重新加载文档以确保会话状态一致
