@@ -167,6 +167,69 @@ def es_search_related(query: SearchQuery):
         raise HTTPException(status_code=500, detail=f"搜索处理错误: {str(e)}")
     
 
+
+# 在现有SearchQuery模型下方添加
+class DocumentSearchQuery(BaseModel):
+    document_id: int
+    query: str
+    page_size: int = 10
+    page_number: int = 1
+    search_in: List[str] = ["fragments.content", "document.content"]  # 指定搜索范围
+
+@router.post("/es_search_document")
+async def es_search_document(query: DocumentSearchQuery):
+    """在指定文档内进行ES搜索"""
+    try:
+        # 调用增强搜索函数，传入文档ID过滤条件
+        results = enhanced_search(
+            query=query.query,
+            search_in=query.search_in,
+            page_size=query.page_size,
+            page_number=query.page_number,
+            document_id=query.document_id  # 新增文档ID参数
+        )
+        
+        hits = results['hits']['hits']
+        processed_results = []
+        
+        for hit in hits:
+            source = hit['_source']
+            highlight = hit.get('highlight', {})
+            
+            # 文档高亮
+            doc_highlight = highlight.get('document.content', [])
+            
+            # 片段高亮
+            matched_fragments = []
+            if 'inner_hits' in hit and 'fragments' in hit['inner_hits']:
+                for frag_hit in hit['inner_hits']['fragments']['hits']['hits']:
+                    frag_source = frag_hit['_source']
+                    frag_highlight = frag_hit.get('highlight', {})
+                    frag_content = frag_highlight.get('fragments.content', [frag_source['content']])[0]
+                    
+                    matched_fragments.append({
+                        "content": frag_source['content'],
+                        "page_idx": frag_source['page_idx'],
+                        "bbox": frag_source['bbox'],
+                        "highlight": frag_content
+                    })
+            
+            processed_results.append({
+                "document_id": source['document_id'],
+                "document_title": source['document']['title'],
+                "document_highlight": doc_highlight[0] if doc_highlight else source['document']['content'][:200] + "...",
+                "matched_fragments": matched_fragments,
+                "score": hit['_score']
+            })
+        
+        return {
+            "total": results['hits']['total']['value'],
+            "results": processed_results
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"文档内搜索错误: {str(e)}")
+    
 @router.get("/default_search")
 async def search_documents(query: str = "", db: AsyncSession = Depends(get_db), page_size: int = 10, page_number: int = 1):
     # 计算偏移量

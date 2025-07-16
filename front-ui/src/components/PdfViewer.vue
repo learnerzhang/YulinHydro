@@ -65,7 +65,7 @@ const loadPdf = async () => {
   if (abortController.value) {
     abortController.value.abort()
   }
-  
+
   if (!props.src) {
     const err = new Error('请提供有效的PDF地址')
     handleError(err)
@@ -84,49 +84,43 @@ const loadPdf = async () => {
     
     let loadingTask;
     
-    // 检查是否是数据URL
-    if (typeof props.src === 'string' && props.src.startsWith('data:')) {
-      // 处理data URI
-      const data = atob(props.src.split(',')[1])
-      loadingTask = pdfjsLib.getDocument({ 
-        data,
-        verbosity: 0
-      })
-    } else if (typeof props.src === 'string' && props.src.startsWith('http')) {
-      // 处理跨域URL - 尝试两种方式
-      try {
-        // 方式1: 直接加载
-        loadingTask = pdfjsLib.getDocument({ 
-          url: props.src,
-          withCredentials: false,
-          signal: abortController.value.signal
-        })
-      } catch (e) {
-        // 方式2: 通过fetch先获取数据
-        const response = await fetch(props.src, {
-          method: 'GET',
-          mode: 'cors',
-          cache: 'no-store',
-          signal: abortController.value.signal
-        })
-        
-        if (!response.ok) {
-          throw new Error(`HTTP错误: ${response.status}`)
+    // 修改loadPdf函数中的fetch部分
+    if (typeof props.src === 'string' && props.src.startsWith('http')) {
+        // 处理跨域URL - 优化请求配置
+        try {
+            // 方式1: 直接加载（带更完整的跨域配置）
+            loadingTask = pdfjsLib.getDocument({ 
+            url: props.src,
+            withCredentials: false,
+            signal: abortController.value.signal,
+            // 新增跨域请求头配置
+            httpHeaders: {
+                'Access-Control-Request-Method': 'GET',
+                'Accept': 'application/pdf'
+            }
+            })
+        } catch (e) {
+            // 方式2: 通过fetch先获取数据（优化跨域处理）
+            const response = await fetch(props.src, {
+            method: 'GET',
+            mode: 'cors', // 明确跨域模式
+            cache: 'no-store',
+            signal: abortController.value.signal,
+            headers: {
+                'Accept': 'application/pdf'
+            }
+            })
+            
+            if (!response.ok) {
+            throw new Error(`HTTP错误: ${response.status} (可能是跨域限制或文件不存在)`)
+            }
+            
+            const arrayBuffer = await response.arrayBuffer()
+            loadingTask = pdfjsLib.getDocument({
+            data: new Uint8Array(arrayBuffer),
+            verbosity: 0
+            })
         }
-        
-        const arrayBuffer = await response.arrayBuffer()
-        loadingTask = pdfjsLib.getDocument({
-          data: new Uint8Array(arrayBuffer),
-          verbosity: 0
-        })
-      }
-    } else {
-      // 处理本地文件或相对路径
-      loadingTask = pdfjsLib.getDocument({ 
-        url: props.src,
-        withCredentials: true,
-        signal: abortController.value.signal
-      })
     }
     
     // 加载文档
@@ -236,9 +230,15 @@ const handleError = (err) => {
   if (err.name === 'AbortError') {
     message = '请求已取消'
   } else if (err.message.includes('Failed to fetch') || err.details?.includes('Failed to fetch')) {
-    message = '无法连接到服务器，请检查网络连接\n可能的原因：\n- 网络连接问题\n- 跨域访问限制\n- 文件地址无效'
+    message = `网络请求失败: 无法获取PDF文件
+                可能的解决方案:
+                1. 检查网络连接是否正常
+                2. 确认PDF文件URL是否可访问
+                3. 若为跨域请求，请联系服务器管理员设置CORS头:
+                Access-Control-Allow-Origin: * (或当前域名)`
   } else if (err.message.includes('HTTP错误')) {
-    message = `服务器返回错误: ${err.message}\n可能是文件不存在或权限不足`
+    message = `服务器返回错误: ${err.message}
+可能是文件不存在或权限不足`
   } else if (err.message.includes('private member')) {
     message = 'PDF格式不兼容，请尝试更新PDF查看器'
   } else {

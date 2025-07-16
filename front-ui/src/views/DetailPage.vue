@@ -137,15 +137,28 @@ const processSearchResults = (results) => {
   })
 }
 
+// 在fetchPdfUrl函数中添加URL验证
 const fetchPdfUrl = async () => {
   try {
     isLoading.value = true
     const id = route.params.id
     const response = await apis.getPdfDetail(id)
-    pdfUrl.value = response.data.data?.file_url;
+    const fileUrl = response.data.data?.file_url;
+    
+    // 新增URL格式验证
+    if (!fileUrl) {
+      throw new Error('未获取到有效的PDF地址')
+    }
+    try {
+      new URL(fileUrl); // 验证URL格式
+    } catch (err) {
+      throw new Error(`PDF地址格式无效: ${fileUrl}`)
+    }
+    
+    pdfUrl.value = fileUrl;
   } catch (err) {
     console.error('获取PDF地址失败:', err)
-    error.value = '获取文档失败，请重试'
+    error.value = err.message || '获取文档失败，请重试'
   } finally {
     isLoading.value = false
   }

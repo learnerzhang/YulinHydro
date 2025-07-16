@@ -1,5 +1,6 @@
 # es_utils.py
 import json
+from typing import Optional
 from elasticsearch import Elasticsearch, helpers
 from config import ES_HOST, ES_PORT, ES_USERNAME, ES_PASSWORD
 
@@ -73,7 +74,7 @@ def create_index(force_recreate=False):
         print(f"索引 {INDEX_NAME} 已存在")
 
 
-def enhanced_search(query, search_in, page_size=10, page_number=1):
+def enhanced_search(query, search_in, page_size=10, page_number=1, document_id: Optional[int] = None):
     # 检查索引是否存在且映射正确
     if not es.indices.exists(index=INDEX_NAME):
         create_index()
@@ -102,6 +103,12 @@ def enhanced_search(query, search_in, page_size=10, page_number=1):
             "fields": {}
         }
     }
+
+    # 如果指定了文档ID，添加过滤条件
+    if document_id is not None:
+        es_query["query"]["bool"]["filter"] = [
+            {"term": {"document_id": f"doc_{document_id}"}}
+        ]
 
     # 添加搜索字段
     for field in search_in:
