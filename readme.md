@@ -23,7 +23,7 @@ uv pip install -U "mineru[core]"
 `
 
 ## ES分词器
-### bin/elasticsearch-plugin install https://get.infini.cloud/elasticsearch/analysis-ik/8.4.1
+### bin/elasticsearch-plugin install https://get.infini.cloud/elasticsearch/analysis-ik/7.17.2
 
 ##### 版本要和本地的ES环境保持一致
 
